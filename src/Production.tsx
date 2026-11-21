@@ -3,6 +3,14 @@ import { advanceOrder, stages, type Order, type Stage } from './domain'
 import { Icon } from './visuals'
 
 const time = new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+const nextAction: Record<Stage, string> = {
+  Pendiente: 'Marcar pendiente',
+  'En corte': 'Avanzar a corte',
+  'En bordado': 'Avanzar a bordado',
+  'En armado': 'Avanzar a armado',
+  'Listo para entrega': 'Marcar lista para entrega',
+  Entregado: 'Marcar como entregada',
+}
 
 export function Production({ orders, setOrders }: { orders: Order[]; setOrders: Dispatch<SetStateAction<Order[]>> }) {
   const [filter, setFilter] = useState<Stage | ''>('')
@@ -29,7 +37,7 @@ export function Production({ orders, setOrders }: { orders: Order[]; setOrders: 
       <details><summary>Detalles de la orden</summary><p>{order.customer}</p><p>{order.updatedAt ? `Último cambio: ${time.format(new Date(order.updatedAt))}` : 'Aún sin cambios en esta sesión.'}</p></details>
       {blocked && <p className="field-error">Liquida el saldo antes de entregar.</p>}
       {next && !blocked && <button className="button button-secondary" type="button" onClick={() => move(order)}
-        aria-label={`${order.id}: avanzar a ${next.toLowerCase()}`}>Avanzar a {next.toLowerCase()} <Icon name="arrow" /></button>}
+        aria-label={`${order.id}: ${nextAction[next]}`}>{nextAction[next]} <Icon name="arrow" /></button>}
     </article>
   }
 
