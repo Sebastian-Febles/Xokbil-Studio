@@ -1,11 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { sizes, type Customer, type Order } from './domain'
-
-export function matchesSearch(value: string, query: string) {
-  const normalize = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es-MX')
-  return normalize(value).includes(normalize(query.trim()))
-}
+import { matchesSearch, sizes, type Customer, type Order } from './domain'
 
 export function Customers({ customers, orders, add }: {
   customers: Customer[]; orders: Order[]; add: (customer: Omit<Customer, 'id'>) => Customer | undefined

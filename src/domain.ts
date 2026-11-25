@@ -5,6 +5,11 @@ export const sleeves = ['Larga', 'Corta', 'Tres cuartos'] as const
 export const pockets = ['Sin bolsas', 'Dos bolsas', 'Cuatro bolsas'] as const
 export const placements = ['Pecho izquierdo', 'Pecho derecho', 'Espalda'] as const
 
+export function matchesSearch(value: string, query: string) {
+  const normalize = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('es-MX')
+  return normalize(value).includes(normalize(query.trim()))
+}
+
 export const demoCatalog = {
   fabrics: [
     { id: 'linen-flame', name: 'Lino flamé', meters: 12 },
@@ -205,9 +210,13 @@ export function advanceOrder(order: Order, at: string): Order {
   return { ...order, stage: next, updatedAt: at }
 }
 
+export function isActiveOrder({ stage }: Order) {
+  return stage !== 'Entregado' && stage !== 'Listo para entrega'
+}
+
 export function stageCounts(orders: Order[]) {
   return {
-    active: orders.filter(({ stage }) => stage !== 'Entregado' && stage !== 'Listo para entrega').length,
+    active: orders.filter(isActiveOrder).length,
     ready: orders.filter(({ stage }) => stage === 'Listo para entrega').length,
   }
 }

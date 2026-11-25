@@ -1,7 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { matchesSearch } from './Customers'
-import { demoCatalog, type Order } from './domain'
+import { demoCatalog, matchesSearch, type Order } from './domain'
 
 export const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 const date = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
