@@ -1,20 +1,35 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { blankDraft, collars, demoCatalog, garments, placements, pockets, sizes, sleeves, templates, validateStep, type Draft } from './domain'
+import { blankDraft, collars, demoCatalog, garments, placements, pockets, quoteOrder, sizes, sleeves, templates, validateStep, type Customer, type Draft } from './domain'
+import { money } from './Sales'
 import { Garment, Icon } from './visuals'
 
 const steps = ['Prenda y tela', 'Piezas y alforzas', 'Bordado', 'Resumen']
 const decimal = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 })
 
-export function Configurator() {
-  const [draft, setDraft] = useState<Draft>({ ...blankDraft })
+export function Configurator({ customers, initialCustomer, onConfirm }: {
+  customers: Customer[]
+  initialCustomer: string
+  onConfirm: (customerId: string, draft: Draft, price: string, deposit: string) => boolean
+}) {
+  const [draft, setDraft] = useState<Draft>(() => ({
+    ...blankDraft, size: customers.find(({ id }) => id === initialCustomer)?.usualSize || blankDraft.size,
+  }))
+  const [customerId, setCustomerId] = useState(initialCustomer)
+  const [price, setPrice] = useState('900')
+  const [deposit, setDeposit] = useState('0')
+  const [approved, setApproved] = useState(false)
+  const [saleIssue, setSaleIssue] = useState<{ field: string; message: string }>()
   const [step, setStep] = useState(0)
   const [issue, setIssue] = useState<ReturnType<typeof validateStep>>()
   const [back, setBack] = useState(false)
   const [notice, setNotice] = useState('')
   const stepTitle = useRef<HTMLHeadingElement>(null)
+  const confirmed = useRef(false)
 
   function selectStep(next: number) {
     setIssue(undefined)
+    setSaleIssue(undefined)
+    setApproved(false)
     setStep(next)
     requestAnimationFrame(() => stepTitle.current?.focus())
   }
@@ -33,7 +48,23 @@ export function Configurator() {
       event.currentTarget.querySelector<HTMLElement>(`#draft-${validation.field}`)?.focus()
       return
     }
-    if (step < steps.length - 1) selectStep(step + 1)
+    if (step < steps.length - 1) {
+      selectStep(step + 1)
+      return
+    }
+    const error = !customerId ? { field: 'customer', message: 'Selecciona el cliente del pedido.' }
+      : 'field' in quote ? quote
+      : !approved ? { field: 'approval', message: 'Confirma que el cliente revisó la configuración.' } : undefined
+    if (error) {
+      setSaleIssue(error)
+      event.currentTarget.querySelector<HTMLElement>(`#sale-${error.field}`)?.focus()
+      return
+    }
+    if (confirmed.current) return
+    confirmed.current = onConfirm(customerId, draft, price, deposit)
+    if (!confirmed.current) {
+      setSaleIssue({ field: 'confirm', message: 'Revisa el cliente y la configuración antes de confirmar.' })
+    }
   }
 
   function field(label: string, name: keyof Draft, input: ReactNode) {
@@ -58,9 +89,11 @@ export function Configurator() {
   const fabric = demoCatalog.fabrics.find(({ id }) => id === draft.fabricId)?.name
   const design = demoCatalog.embroideries.find(({ id }) => id === draft.designId)?.name
   const thread = demoCatalog.threads.find(({ id }) => id === draft.threadId)?.name
+  const quote = quoteOrder(draft.quantity, price, deposit)
+  const embroidery = !design ? undefined : draft.placement === 'Espalda' ? 'back' : draft.placement === 'Pecho derecho' ? 'right' : 'left'
 
   return <>
-    <header className="page-heading"><h1 tabIndex={-1}>Configurador de prenda</h1><p>Captura las especificaciones con el catálogo de demostración.</p></header>
+    <header className="page-heading"><h1 tabIndex={-1}>Configurador de prenda</h1><p>Captura la prenda y revisa el pedido con el cliente.</p></header>
     <ol className="stepper" aria-label="Pasos de configuración">
       {steps.map((label, index) => <li key={label} aria-current={step === index ? 'step' : undefined}>
         <span className="step-number">{index + 1}</span><span>{label}</span>
@@ -112,11 +145,40 @@ export function Configurator() {
               <><dt>Medidas de alforza</dt><dd>Ancho {draft.pleatWidth} cm · Separación {draft.pleatGap} cm</dd></>}
             <dt>Bordado</dt><dd>{design ? `${design} · ${draft.placement} · ${thread}` : 'Sin bordado'}</dd>
           </dl>
-          <p className="hint">La configuración está lista para revisar. El registro del pedido depende de la integración de ventas.</p>
+          <section className="workflow-card inset" aria-labelledby="quote-heading">
+            <h3 id="quote-heading">Cuenta del pedido</h3>
+            <div className="field"><label htmlFor="sale-customer">Cliente</label>
+              <select id="sale-customer" value={customerId} onChange={(event) => { setCustomerId(event.target.value); setApproved(false); setSaleIssue(undefined) }}
+                aria-invalid={saleIssue?.field === 'customer' || undefined} aria-describedby={saleIssue?.field === 'customer' ? 'sale-error' : undefined}>
+                <option value="">Selecciona un cliente</option>
+                {customers.map((customer) => <option key={customer.id} value={customer.id}>
+                  {customer.name}{customer.phone ? ` · ${customer.phone}` : ''}
+                </option>)}
+              </select>
+            </div>
+            <div className="form-grid">
+              <div className="field"><label htmlFor="sale-price">Precio por prenda (MXN)</label>
+                <input id="sale-price" inputMode="decimal" value={price} onChange={(event) => { setPrice(event.target.value); setApproved(false); setSaleIssue(undefined) }}
+                  aria-invalid={saleIssue?.field === 'price' || undefined} aria-describedby={saleIssue?.field === 'price' ? 'sale-error' : undefined} />
+              </div>
+              <div className="field"><label htmlFor="sale-deposit">Anticipo (MXN)</label>
+                <input id="sale-deposit" inputMode="decimal" value={deposit} onChange={(event) => { setDeposit(event.target.value); setApproved(false); setSaleIssue(undefined) }}
+                  aria-invalid={saleIssue?.field === 'deposit' || undefined} aria-describedby={saleIssue?.field === 'deposit' ? 'sale-error' : undefined} />
+              </div>
+            </div>
+            <p className="hint">Precio editable de demostración. El cálculo textil se incorporará al validar el patronaje.</p>
+            {'totalCents' in quote && <p className="quote-totals"><strong>Total {money.format(quote.totalCents / 100)}</strong><span>Saldo {money.format(quote.balanceCents / 100)}</span></p>}
+            <label className="check-field"><input id="sale-approval" type="checkbox" checked={approved}
+              aria-describedby={saleIssue?.field === 'approval' ? 'sale-error' : undefined}
+              onChange={(event) => { setApproved(event.target.checked); setSaleIssue(undefined) }} /> El cliente aprobó la configuración y el importe.</label>
+            {saleIssue && <p id="sale-error" className="field-error" role="alert">{saleIssue.message}</p>}
+          </section>
         </>}
         <div className="form-actions">
           {step > 0 && <button className="button button-secondary" type="button" onClick={() => selectStep(step - 1)}>Volver</button>}
-          {step < steps.length - 1 && <button className="button" type="submit">Continuar <Icon name="arrow" /></button>}
+          {step < steps.length - 1
+            ? <button className="button" type="submit">Continuar <Icon name="arrow" /></button>
+            : <button className="button" type="submit">Confirmar pedido <Icon name="check" /></button>}
         </div>
       </form>
       <aside className="card preview" aria-labelledby="preview-title">
@@ -126,7 +188,7 @@ export function Configurator() {
           <button type="button" className="button button-secondary" aria-pressed={back} onClick={() => setBack(true)}>Espalda</button>
         </div>
         <Garment back={back} frontPleats={Number(draft.frontPleats) > 0}
-          backPleats={Number(draft.backPleats) > 0} embroidery={Boolean(design) && draft.placement !== 'Espalda'} />
+          backPleats={Number(draft.backPleats) > 0} embroidery={embroidery ?? false} />
         <p>Guayabera ilustrativa. Las especificaciones exactas aparecen en el resumen.</p>
         <span className="tag">Talla {draft.size}</span>
       </aside>

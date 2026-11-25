@@ -17,8 +17,8 @@ export function Icon({ name }: { name: IconName }) {
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>
 }
 
-export function Garment({ back = false, frontPleats = true, backPleats = true, embroidery = true }: {
-  back?: boolean; frontPleats?: boolean; backPleats?: boolean; embroidery?: boolean
+export function Garment({ back = false, frontPleats = true, backPleats = true, embroidery = 'left' }: {
+  back?: boolean; frontPleats?: boolean; backPleats?: boolean; embroidery?: 'left' | 'right' | 'back' | false
 }) {
   return <svg className="garment" aria-hidden="true" viewBox="0 0 290 230" fill="none" strokeLinejoin="round">
     <path d="M0 192h290M0 146h290M0 100h290M0 54h290M46 0v230M95 0v230M145 0v230M195 0v230M244 0v230" stroke="currentColor" opacity=".15" />
@@ -29,8 +29,10 @@ export function Garment({ back = false, frontPleats = true, backPleats = true, e
         <path d="m108 29 16 10h42l16-10-12 34-25-17-25 17zm37 17v168" stroke="#a98a61" fill="#ead8b4" strokeWidth="1.5" />
         <path d="M93 91h25v28H93zm79 0h25v28h-25zM93 152h25v27H93zm79 0h25v27h-25z" stroke="#a98a61" strokeWidth="1.5" />
         <path d="M150 78h.01m0 20h.01m0 20h.01m0 20h.01m0 20h.01m0 20h.01m0 20h.01" strokeLinecap="round" stroke="#85613f" strokeWidth="3" />
-        {embroidery && <path d="m181 102 14-7-7 12 5 5-11-4-5 7 2-9-5-4z" fill="#4c6f75" />}
       </>}
+    {embroidery && back === (embroidery === 'back') &&
+      <path data-embroidery={embroidery} d="m181 102 14-7-7 12 5 5-11-4-5 7 2-9-5-4z"
+        transform={embroidery === 'back' ? 'translate(-40 19)' : embroidery === 'right' ? 'translate(-80)' : undefined} fill="#4c6f75" />}
     {(back ? backPleats : frontPleats) && <path d="M124 76v116m5-116v116m32-116v116m5-116v116" stroke="#bc9d73" strokeWidth="1" strokeDasharray="3 2" />}
   </svg>
 }

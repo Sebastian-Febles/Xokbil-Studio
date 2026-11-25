@@ -116,6 +116,23 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .board-column .order-card + .order-card { margin-top: .55rem; }
 .no-orders { color: var(--muted); }
 
+.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; align-items: start; }
+.workflow-card { display: grid; min-width: 0; gap: .8rem; align-content: start; overflow-wrap: anywhere; }
+.workflow-card > .button, .workflow-card form > .button { justify-self: start; }
+.workflow-card > p[role="status"]:empty { margin-block-end: -.8rem; }
+.inset { padding: .85rem; border: 1px solid var(--line); border-radius: .65rem; background: #f6f8f4; }
+.editor > .inset { margin-top: .85rem; }
+.inset .hint { margin-top: 0; }
+.record-list { margin: 0; padding: 0; list-style: none; }
+.record-list li { border-top: 1px solid var(--line); }
+.record-link, .client-choice, .payment-entry { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: .4rem; min-height: 44px; width: 100%; text-align: left; padding: .52rem .6rem; }
+.record-link:hover, .client-choice:hover, .client-choice[aria-pressed="true"] { background: #e9f1e8; }
+.text-link { color: var(--accent); text-decoration: underline; text-underline-offset: .16em; justify-self: start; }
+.check-field { display: flex; align-items: center; gap: .55rem; min-height: 44px; font-size: .91rem; font-weight: 600; }
+.check-field input { min-height: 0; width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--accent); }
+.quote-totals { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem; }
+.sheet-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .55rem; margin-bottom: .85rem; border-radius: .65rem; padding: .85rem; color: white; background: var(--forest); overflow-wrap: anywhere; }
+
 @media (max-width: 940px) {
   .config-grid { grid-template-columns: 1fr; }
   .preview > svg { max-height: 190px; }
@@ -130,6 +147,18 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .menu-trigger { display: inline-flex; align-items: center; gap: .3rem; min-height: 44px; padding: .3rem .45rem; border: 1px solid #729184; border-radius: .5rem; }
   .workspace { margin-left: 0; }
   .topbar { flex-wrap: wrap; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
+
+@media print {
+  :root, body { color: black; background: white; }
+  .sidebar, .topbar, .skip-link, .no-print { display: none !important; }
+  .shell { min-height: 0; }
+  .workspace { margin: 0; }
+  main { max-width: none; padding: 0; }
+  .technical-sheet .detail-grid { display: block; }
+  .technical-sheet .card { margin-bottom: .8rem; break-inside: avoid; }
+  .sheet-banner { border: 1px solid #666; color: black; background: white; }
 }
 
 @media (max-width: 480px) {

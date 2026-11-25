@@ -1,9 +1,11 @@
 import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { HashRouter, Link, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { HashRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Configurator } from './Configurator'
+import { Customers } from './Customers'
 import { Production } from './Production'
-import { demoOrders, stageCounts, type Order } from './domain'
+import { money, SaleDetail, Sales, TechnicalSheet } from './Sales'
+import { advanceOrder, createOrder, demoCustomers, demoOrders, recordPayment, stageCounts, type Customer, type Draft, type Order } from './domain'
 import { Icon, Garment, type IconName } from './visuals'
 import './styles.css'
 
@@ -19,7 +21,21 @@ const sections: { path: string; label: string; icon: IconName; roles: readonly R
 ]
 
 const today = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' })
-const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
+const workshopKey = 'xokbil-workshop-demo-v1'
+type Workshop = { orders: Order[]; customers: Customer[] }
+
+function loadWorkshop(): Workshop {
+  try {
+    const value = sessionStorage.getItem(workshopKey)
+    if (value) {
+      const state = JSON.parse(value)
+      if (Array.isArray(state.orders) && Array.isArray(state.customers)) return state
+    }
+  } catch {
+    // Browsers can disable storage. The demo can still run in memory.
+  }
+  return { orders: demoOrders, customers: demoCustomers }
+}
 
 function Dashboard({ orders, role }: { orders: Order[]; role: Role }) {
   const totals = stageCounts(orders)
@@ -35,7 +51,7 @@ function Dashboard({ orders, role }: { orders: Order[]; role: Role }) {
           <h2 id="hero-title">Del pedido a la producción</h2>
           <p>Configura prendas y sigue el avance desde corte hasta entrega.</p>
           {role !== 'Producción'
-            ? <Link className="button button-light" to="/pedidos/configurador">Configurar prenda <Icon name="arrow" /></Link>
+            ? <Link className="button button-light" to="/clientes">Nuevo pedido <Icon name="arrow" /></Link>
             : <Link className="button button-light" to="/produccion">Abrir producción <Icon name="arrow" /></Link>}
         </div>
         <div className="hero-art"><Garment /></div>
@@ -44,7 +60,7 @@ function Dashboard({ orders, role }: { orders: Order[]; role: Role }) {
         <article className="card metric"><Icon name="board" /><h2>Órdenes activas</h2><strong>{totals.active}</strong></article>
         <article className="card metric"><Icon name="check" /><h2>Listas para entrega</h2><strong>{totals.ready}</strong></article>
         {role !== 'Producción' &&
-          <article className="card metric"><Icon name="orders" /><h2>Saldo de DEMO-001</h2><strong>{money.format(demoOrders[0].balance)}</strong></article>}
+          <article className="card metric"><Icon name="orders" /><h2>Saldo por cobrar</h2><strong>{money.format(orders.reduce((sum, order) => sum + Math.round(order.balance * 100), 0) / 100)}</strong></article>}
       </div>
       {role !== 'Mostrador' && <section className="card recent">
         <div className="section-heading"><h2>Producción del taller</h2><Link to="/produccion">Ver órdenes <Icon name="arrow" /></Link></div>
@@ -65,14 +81,78 @@ function Module({ title, detail, children }: { title: string; detail: string; ch
   </>
 }
 
+function OrderPage({ orders, pay, sheet, canSell }: {
+  orders: Order[]; pay: (id: string, amount: string) => boolean; sheet?: boolean; canSell: boolean
+}) {
+  const { id } = useParams()
+  const order = orders.find((item) => item.id === id)
+  if (!order || (sheet && !order.sale)) {
+    return <Module title={sheet ? 'Ficha no disponible' : 'Pedido no disponible'} detail="Revisa el folio y vuelve a la lista.">
+      <Link className="button" to={canSell ? '/pedidos' : '/produccion'}>Volver a la lista</Link>
+    </Module>
+  }
+  if (sheet) {
+    return <TechnicalSheet order={order} backTo={canSell ? `/pedidos/${order.id}` : '/produccion'} />
+  }
+  return <SaleDetail key={order.id} order={order} pay={(amount) => pay(order.id, amount)} />
+}
+
 function App() {
   const [role, setRole] = useState<Role>('Administración')
-  const [orders, setOrders] = useState(demoOrders)
+  const [workshop, setWorkshop] = useState(loadWorkshop)
+  const current = useRef(workshop)
+  const [storageUnavailable, setStorageUnavailable] = useState(false)
+  const { orders, customers } = workshop
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
   const previousPath = useRef(location.pathname)
   const menuButton = useRef<HTMLButtonElement>(null)
   const main = useRef<HTMLElement>(null)
+
+  function save(state: Workshop) {
+    current.current = state
+    setWorkshop(state)
+    try {
+      sessionStorage.setItem(workshopKey, JSON.stringify(state))
+      setStorageUnavailable(false)
+    } catch {
+      setStorageUnavailable(true)
+    }
+  }
+
+  function addCustomer(data: Omit<Customer, 'id'>) {
+    const state = current.current
+    if (data.phone && state.customers.some((customer) => customer.phone === data.phone)) return undefined
+    const customer = { ...data, id: `cliente-${state.customers.length + 1}` }
+    save({ ...state, customers: [...state.customers, customer] })
+    return customer
+  }
+
+  function confirm(customerId: string, draft: Draft, price: string, deposit: string) {
+    const state = current.current
+    const customer = state.customers.find(({ id }) => id === customerId)
+    if (!customer) return false
+    const order = createOrder(state.orders, customer, draft, price, deposit, new Date().toISOString())
+    if (!order) return false
+    save({ ...state, orders: [order, ...state.orders] })
+    navigate(`/pedidos/${order.id}`, { replace: true })
+    return true
+  }
+
+  function changeOrder(id: string, update: (order: Order) => Order) {
+    const state = current.current
+    const order = state.orders.find((item) => item.id === id)
+    if (!order) return false
+    const updated = update(order)
+    if (updated === order) return false
+    save({ ...state, orders: state.orders.map((item) => item.id === id ? updated : item) })
+    return true
+  }
+
+  function pay(id: string, amount: string) {
+    return changeOrder(id, (order) => recordPayment(order, amount, new Date().toISOString()))
+  }
 
   useEffect(() => {
     const heading = main.current?.querySelector('h1')
@@ -86,6 +166,9 @@ function App() {
 
   const selected = sections.filter((section) => section.roles.includes(role))
   const allowed = (path: string) => selected.some((section) => section.path === path)
+  const canSell = allowed('/pedidos')
+  const customerParam = new URLSearchParams(location.search).get('cliente')
+  const initialCustomer = customers.find(({ id }) => id === customerParam)?.id ?? ''
   const blocked = <Module title="Sección de otro rol" detail="Cambia el rol de demostración o vuelve al panel."><Link className="button" to="/">Volver al panel</Link></Module>
 
   return <div className="shell">
@@ -110,13 +193,18 @@ function App() {
         <label>Rol de demostración <select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((item) => <option key={item}>{item}</option>)}</select></label>
       </div>
       <main id="contenido" tabIndex={-1} ref={main}>
+        {storageUnavailable && <p role="status" className="field-error no-print">El navegador no permite guardar la sesión. Conserva esta pestaña abierta sin recargar.</p>}
         <Routes>
           <Route path="/" element={<Dashboard orders={orders} role={role} />} />
-          <Route path="/pedidos" element={allowed('/pedidos') ? <Module title="Pedidos y ventas" detail="La captura de pedidos y los anticipos se integrarán en esta sección."><Link className="button" to="/pedidos/configurador">Configurar prenda <Icon name="arrow" /></Link></Module> : blocked} />
-          <Route path="/pedidos/configurador" element={allowed('/pedidos') ? <Configurator /> : blocked} />
-          <Route path="/produccion" element={allowed('/produccion') ? <Production orders={orders} setOrders={setOrders} /> : blocked} />
+          <Route path="/pedidos" element={canSell ? <Sales orders={orders} /> : blocked} />
+          <Route path="/pedidos/configurador" element={canSell ? <Configurator key={initialCustomer} customers={customers} initialCustomer={initialCustomer} onConfirm={confirm} /> : blocked} />
+          <Route path="/pedidos/:id" element={canSell ? <OrderPage orders={orders} pay={pay} canSell /> : blocked} />
+          <Route path="/fichas/:id" element={<OrderPage orders={orders} pay={pay} canSell={canSell} sheet />} />
+          <Route path="/produccion" element={allowed('/produccion') ? <Production orders={orders} advance={(original) =>
+            changeOrder(original.id, (order) => order.stage === original.stage ? advanceOrder(order, new Date().toISOString()) : order)
+          } canSell={canSell} /> : blocked} />
           <Route path="/inventario" element={allowed('/inventario') ? <Module title="Inventario y catálogos" detail="Aquí se integrarán las telas, los hilos y el catálogo de bordados del taller." /> : blocked} />
-          <Route path="/clientes" element={allowed('/clientes') ? <Module title="Clientes" detail="Aquí se integrarán el directorio y el historial de pedidos." /> : blocked} />
+          <Route path="/clientes" element={allowed('/clientes') ? <Customers customers={customers} orders={orders} add={addCustomer} /> : blocked} />
           <Route path="*" element={<Module title="Página fuera del taller" detail="La dirección solicitada no corresponde a una sección disponible."><Link className="button" to="/">Volver al panel</Link></Module>} />
         </Routes>
       </main>

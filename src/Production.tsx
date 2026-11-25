@@ -1,5 +1,6 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
-import { advanceOrder, stages, type Order, type Stage } from './domain'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { stages, type Order, type Stage } from './domain'
 import { Icon } from './visuals'
 
 const time = new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' })
@@ -12,17 +13,16 @@ const nextAction: Record<Stage, string> = {
   Entregado: 'Marcar como entregada',
 }
 
-export function Production({ orders, setOrders }: { orders: Order[]; setOrders: Dispatch<SetStateAction<Order[]>> }) {
+export function Production({ orders, advance, canSell }: { orders: Order[]; advance: (order: Order) => boolean; canSell: boolean }) {
   const [filter, setFilter] = useState<Stage | ''>('')
   const [view, setView] = useState<'list' | 'board'>('list')
   const [notice, setNotice] = useState('')
   const visible = filter ? orders.filter(({ stage }) => stage === filter) : orders
 
   function move(order: Order) {
-    const updated = advanceOrder(order, new Date().toISOString())
-    if (updated === order) return
-    setOrders((current) => current.map((item) => item.id === order.id && item.stage === order.stage ? updated : item))
-    setNotice(`${order.id} cambió a ${updated.stage.toLowerCase()}.`)
+    const next = stages[stages.indexOf(order.stage) + 1]
+    if (!next || !advance(order)) return
+    setNotice(`${order.id} cambió a ${next.toLowerCase()}.`)
     if (filter) document.getElementById('filter-stage')?.focus()
     else requestAnimationFrame(() => document.getElementById(order.id)?.focus())
   }
@@ -34,15 +34,17 @@ export function Production({ orders, setOrders }: { orders: Order[]; setOrders: 
       <div className="order-top"><h3>{order.id}</h3><span className="tag">{order.stage}</span></div>
       <strong>{order.garment}</strong>
       <p>{order.specs}</p>
-      <details><summary>Detalles de la orden</summary><p>{order.customer}</p><p>{order.updatedAt ? `Último cambio: ${time.format(new Date(order.updatedAt))}` : 'Aún sin cambios en esta sesión.'}</p></details>
+      <details><summary>Detalles de la orden</summary><p>{order.customer}</p><p>{order.updatedAt ? `Último cambio: ${time.format(new Date(order.updatedAt))}` : 'Sin fecha de cambio registrada.'}</p></details>
+      {order.sale && <Link className="text-link" to={`/fichas/${order.id}`} aria-label={`${order.id}: Abrir ficha técnica`}>Abrir ficha técnica</Link>}
       {blocked && <p className="field-error">Liquida el saldo antes de entregar.</p>}
+      {blocked && canSell && order.sale && <Link className="text-link" to={`/pedidos/${order.id}`}>Consultar cuenta del pedido</Link>}
       {next && !blocked && <button className="button button-secondary" type="button" onClick={() => move(order)}
         aria-label={`${order.id}: ${nextAction[next]}`}>{nextAction[next]} <Icon name="arrow" /></button>}
     </article>
   }
 
   return <>
-    <header className="page-heading"><h1 tabIndex={-1}>Órdenes de producción</h1><p>Consulta pedidos de muestra y registra su avance durante esta sesión.</p></header>
+    <header className="page-heading"><h1 tabIndex={-1}>Órdenes de producción</h1><p>Consulta los pedidos aprobados y registra su avance.</p></header>
     <div className="card board-toolbar">
       <label htmlFor="filter-stage">Filtrar por etapa <select id="filter-stage" value={filter} onChange={(event) => { setFilter(event.target.value as Stage | ''); setNotice('') }}>
         <option value="">Todas las etapas</option>{stages.map((stage) => <option key={stage}>{stage}</option>)}

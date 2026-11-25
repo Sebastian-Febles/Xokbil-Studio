@@ -104,21 +104,100 @@ export type Stage = (typeof stages)[number]
 export type Order = {
   id: string
   customer: string
+  customerId?: string
   garment: string
   specs: string
   stage: Stage
   balance: number
   updatedAt?: string
+  sale?: Sale
 }
 
+export type Customer = { id: string; name: string; phone: string; usualSize: string }
+export type Payment = { cents: number; at: string; kind: 'Anticipo' | 'Abono' }
+export type Sale = { draft: Draft; totalCents: number; payments: Payment[]; approvedAt: string }
+
+const sampleCustomer = 'cliente-demo-01'
+
 export const demoOrders: Order[] = [
-  { id: 'DEMO-001', customer: 'Cliente de muestra', garment: '2 guayaberas tradicionales',
-    specs: 'Talla 40 · Lino flamé · Colibrí azul', stage: 'Pendiente', balance: 1300 },
-  { id: 'DEMO-002', customer: 'Cliente de muestra', garment: '1 guayamisa',
+  { id: 'DEMO-001', customer: 'Cliente de muestra', customerId: sampleCustomer, garment: '2 guayaberas tradicionales',
+    specs: 'Talla 40 · Lino flamé · Colibrí azul', stage: 'Pendiente', balance: 1300,
+    sale: {
+      draft: { ...classic }, totalCents: 180_000, approvedAt: '2026-11-24T18:00:00.000Z',
+      payments: [{ cents: 50_000, at: '2026-11-24T18:00:00.000Z', kind: 'Anticipo' }],
+    } },
+  { id: 'DEMO-002', customer: 'Cliente de muestra', customerId: sampleCustomer, garment: '1 guayamisa',
     specs: 'Talla 42 · Algodón blanco', stage: 'En bordado', balance: 0 },
-  { id: 'DEMO-003', customer: 'Cliente de muestra', garment: '1 filipina',
+  { id: 'DEMO-003', customer: 'Cliente de muestra', customerId: sampleCustomer, garment: '1 filipina',
     specs: 'Talla 38 · Lino natural', stage: 'Listo para entrega', balance: 0 },
 ]
+
+export const demoCustomers: Customer[] = [
+  { id: sampleCustomer, name: 'Cliente de muestra', phone: '', usualSize: '40' },
+  { id: 'cliente-demo-02', name: 'Cliente de ejemplo 02', phone: '', usualSize: '' },
+]
+
+export function parseCents(input: string) {
+  const value = input.trim()
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(value)) return undefined
+  const [whole, fraction = ''] = value.split(/[.,]/)
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'))
+  return Number.isSafeInteger(cents) ? cents : undefined
+}
+
+type Quote = { totalCents: number; depositCents: number; balanceCents: number }
+type QuoteIssue = { field: 'price' | 'deposit'; message: string }
+
+export function quoteOrder(quantity: string, unitPrice: string, deposit: string): Quote | QuoteIssue {
+  const unitCents = parseCents(unitPrice)
+  const pieces = Number(quantity)
+  if (!Number.isSafeInteger(pieces) || pieces < 1 || !unitCents || !Number.isSafeInteger(unitCents * pieces)) {
+    return { field: 'price', message: 'Ingresa un precio por prenda mayor que cero con hasta dos decimales.' }
+  }
+  const totalCents = unitCents * pieces
+  const depositCents = parseCents(deposit)
+  if (depositCents === undefined || depositCents > totalCents) {
+    return { field: 'deposit', message: 'Ingresa un anticipo entre cero y el total del pedido, con hasta dos decimales.' }
+  }
+  return { totalCents, depositCents, balanceCents: totalCents - depositCents }
+}
+
+export function createOrder(
+  orders: Order[], customer: Customer, draft: Draft, price: string, deposit: string, at: string,
+) {
+  if ([0, 1, 2].some((step) => validateStep(draft, step))) return undefined
+  const quote = quoteOrder(draft.quantity, price, deposit)
+  if ('field' in quote) return undefined
+  const year = at.slice(0, 4)
+  const prefix = `TK-${year}-`
+  const sequence = 1 + orders.reduce((max, order) =>
+    order.id.startsWith(prefix) ? Math.max(max, Number(order.id.slice(prefix.length)) || 0) : max, 0)
+  const fabric = demoCatalog.fabrics.find(({ id }) => id === draft.fabricId)
+  const design = demoCatalog.embroideries.find(({ id }) => id === draft.designId)
+  const order: Order = {
+    id: prefix + String(sequence).padStart(3, '0'),
+    customer: customer.name, customerId: customer.id,
+    garment: `${draft.garment} · ${draft.quantity} pieza(s)`,
+    specs: [`Talla ${draft.size}`, fabric?.name, design?.name].filter(Boolean).join(' · '),
+    stage: 'Pendiente', balance: quote.balanceCents / 100, updatedAt: at,
+    sale: {
+      draft: { ...draft }, totalCents: quote.totalCents, approvedAt: at,
+      payments: quote.depositCents ? [{ cents: quote.depositCents, at, kind: 'Anticipo' }] : [],
+    },
+  }
+  return order
+}
+
+export function recordPayment(order: Order, input: string, at: string): Order {
+  if (!order.sale || order.stage === 'Entregado') return order
+  const cents = parseCents(input)
+  const outstanding = order.sale.totalCents - order.sale.payments.reduce((paid, payment) => paid + payment.cents, 0)
+  if (!cents || cents > outstanding) return order
+  return {
+    ...order, balance: (outstanding - cents) / 100,
+    sale: { ...order.sale, payments: [...order.sale.payments, { cents, at, kind: 'Abono' }] },
+  }
+}
 
 export function advanceOrder(order: Order, at: string): Order {
   const next = stages[stages.indexOf(order.stage) + 1]
