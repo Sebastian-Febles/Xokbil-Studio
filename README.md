@@ -22,19 +22,27 @@ Vite indica la URL de desarrollo en su salida. `npm run preview` sirve la compil
 - **A7 y A9.** Aplica Clásica Tekit y elige la talla. Revisa frente, espalda y bordado. En Resumen conserva el precio de muestra de $900 por prenda, ingresa un anticipo de $500 y confirma la aprobación. Dos piezas dan un total de $1,800 con saldo de $1,300. El pedido aparece en ventas y en producción con el mismo folio.
 - **A10.** Desde Administración abre Producción, alterna Lista y Tablero y avanza la orden. Al llegar a Listo para entrega, el saldo pendiente bloquea el cierre. Abre la cuenta, registra un abono parcial o usa el saldo completo y vuelve al tablero para entregar. También puedes probar este recorrido con DEMO-001.
 - **A11.** Abre la ficha desde el pedido o la orden de producción. En el diálogo de impresión puedes guardarla como PDF. La ficha conserva la configuración aprobada.
+- **Catálogos.** Desde Inventario cambia entre telas, hilos y bordados. Busca por nombre y consulta el metraje de muestra de las telas.
 
 Los datos se guardan en la sesión del navegador y se conservan al recargar la misma pestaña. Los roles son de demostración. Usa clientes y pagos ficticios.
+
+## Aplicación móvil
+
+La web adapta la navegación a una barra inferior en pantallas estrechas. El manifiesto `public/manifest.webmanifest` proporciona el nombre, los iconos y el modo de ventana independiente para la instalación desde navegadores compatibles. La aplicación web requiere conexión para cargar.
 
 ## Código e integración
 
 | Ubicación | Responsabilidad |
 | --- | --- |
-| `src/main.tsx` | Layout, navegación, roles de muestra, panel y rutas |
+| `src/main.tsx` | Layout, navegación, roles de muestra y rutas |
+| `src/Dashboard.tsx` | Indicadores y órdenes recientes |
 | `src/Customers.tsx` | Directorio, alta e historial |
+| `src/Inventory.tsx` | Consulta y búsqueda de materiales y bordados |
 | `src/Configurator.tsx` | Formulario de prenda, plantillas, cotización y aprobación |
 | `src/Sales.tsx` | Pedidos, cuenta, abonos y ficha técnica |
 | `src/Production.tsx` | Lista, tablero, filtros y controles de avance |
 | `src/domain.ts` | Contratos del frontend, catálogo y órdenes de demostración, validadores |
+| `src/workshopStorage.ts` | Persistencia de la sesión de demostración |
 | `src/styles.css` | Tailwind, paleta, componentes y ajustes responsivos |
 | `tests/domain.test.ts` | Casos de configuración y producción |
 

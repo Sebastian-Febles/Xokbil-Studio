@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "Xokbil Studio",
+  "short_name": "Xokbil",
+  "description": "Pedidos, clientes y producción para talleres de confección de Tekit.",
+  "lang": "es-MX",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f2",
+  "theme_color": "#102d25",
+  "icons": [
+    { "src": "icons/xokbil-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/xokbil-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

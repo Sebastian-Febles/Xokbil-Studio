@@ -3,81 +3,34 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Configurator } from './Configurator'
 import { Customers } from './Customers'
+import { Dashboard } from './Dashboard'
+import { Inventory } from './Inventory'
 import { Production } from './Production'
-import { money, SaleDetail, Sales, TechnicalSheet } from './Sales'
-import { advanceOrder, createOrder, demoCustomers, demoOrders, recordPayment, stageCounts, type Customer, type Draft, type Order } from './domain'
-import { Icon, Garment, type IconName } from './visuals'
+import { SaleDetail, Sales, TechnicalSheet } from './Sales'
+import { advanceOrder, createOrder, recordPayment, type Customer, type Draft, type Order } from './domain'
+import { Icon, type IconName } from './visuals'
+import { loadWorkshop, saveWorkshop, type Workshop } from './workshopStorage'
 import './styles.css'
 
 const roles = ['Administración', 'Mostrador', 'Producción'] as const
 type Role = (typeof roles)[number]
 
-const sections: { path: string; label: string; icon: IconName; roles: readonly Role[] }[] = [
-  { path: '/', label: 'Panel principal', icon: 'home', roles },
-  { path: '/pedidos', label: 'Pedidos y ventas', icon: 'orders', roles: ['Administración', 'Mostrador'] },
-  { path: '/produccion', label: 'Órdenes de producción', icon: 'board', roles: ['Administración', 'Producción'] },
-  { path: '/inventario', label: 'Inventario y catálogos', icon: 'box', roles: ['Administración', 'Producción'] },
-  { path: '/clientes', label: 'Clientes', icon: 'people', roles: ['Administración', 'Mostrador'] },
+const sections: { path: string; label: string; shortLabel: string; icon: IconName; roles: readonly Role[] }[] = [
+  { path: '/', label: 'Panel principal', shortLabel: 'Inicio', icon: 'home', roles },
+  { path: '/pedidos', label: 'Pedidos y ventas', shortLabel: 'Pedidos', icon: 'orders', roles: ['Administración', 'Mostrador'] },
+  { path: '/produccion', label: 'Producción', shortLabel: 'Producción', icon: 'board', roles: ['Administración', 'Producción'] },
+  { path: '/inventario', label: 'Inventario y catálogos', shortLabel: 'Inventario', icon: 'box', roles: ['Administración', 'Producción'] },
+  { path: '/clientes', label: 'Clientes', shortLabel: 'Clientes', icon: 'people', roles: ['Administración', 'Mostrador'] },
 ]
 
-const today = new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' })
-const workshopKey = 'xokbil-workshop-demo-v1'
-type Workshop = { orders: Order[]; customers: Customer[] }
-
-function loadWorkshop(): Workshop {
-  try {
-    const value = sessionStorage.getItem(workshopKey)
-    if (value) {
-      const state = JSON.parse(value)
-      if (Array.isArray(state.orders) && Array.isArray(state.customers)) return state
-    }
-  } catch {
-    // Browsers can disable storage. The demo can still run in memory.
-  }
-  return { orders: demoOrders, customers: demoCustomers }
-}
-
-function Dashboard({ orders, role }: { orders: Order[]; role: Role }) {
-  const totals = stageCounts(orders)
-  return (
-    <>
-      <header className="page-heading">
-        <h1 tabIndex={-1}>Panel principal</h1>
-        <p>Consulta las órdenes y continúa el trabajo del taller.</p>
-      </header>
-      <section className="hero" aria-labelledby="hero-title">
-        <div>
-          <p className="eyebrow">Taller de confección · Tekit</p>
-          <h2 id="hero-title">Del pedido a la producción</h2>
-          <p>Configura prendas y sigue el avance desde corte hasta entrega.</p>
-          {role !== 'Producción'
-            ? <Link className="button button-light" to="/clientes">Nuevo pedido <Icon name="arrow" /></Link>
-            : <Link className="button button-light" to="/produccion">Abrir producción <Icon name="arrow" /></Link>}
-        </div>
-        <div className="hero-art"><Garment /></div>
-      </section>
-      <div className="metric-grid">
-        <article className="card metric"><Icon name="board" /><h2>Órdenes activas</h2><strong>{totals.active}</strong></article>
-        <article className="card metric"><Icon name="check" /><h2>Listas para entrega</h2><strong>{totals.ready}</strong></article>
-        {role !== 'Producción' &&
-          <article className="card metric"><Icon name="orders" /><h2>Saldo por cobrar</h2><strong>{money.format(orders.reduce((sum, order) => sum + Math.round(order.balance * 100), 0) / 100)}</strong></article>}
-      </div>
-      {role !== 'Mostrador' && <section className="card recent">
-        <div className="section-heading"><h2>Producción del taller</h2><Link to="/produccion">Ver órdenes <Icon name="arrow" /></Link></div>
-        <ul className="recent-list">
-          {orders.slice(0, 3).map((order) => <li key={order.id}>
-            <div><strong>{order.id}</strong><span>{order.garment}</span></div><span className="tag">{order.stage}</span>
-          </li>)}
-        </ul>
-      </section>}
-    </>
-  )
-}
-
-function Module({ title, detail, children }: { title: string; detail: string; children?: React.ReactNode }) {
+function Module({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {
   return <>
-    <header className="page-heading"><h1 tabIndex={-1}>{title}</h1><p>{detail}</p></header>
-    <section className="card empty"><Icon name="box" /><h2>Integración pendiente</h2>{children}</section>
+    <section className="card empty" aria-labelledby="empty-title">
+      <span className="icon-tile"><Icon name="info" /></span>
+      <h1 id="empty-title" tabIndex={-1}>{title}</h1>
+      <p>{detail}</p>
+      {children}
+    </section>
   </>
 }
 
@@ -103,22 +56,15 @@ function App() {
   const current = useRef(workshop)
   const [storageUnavailable, setStorageUnavailable] = useState(false)
   const { orders, customers } = workshop
-  const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const previousPath = useRef(location.pathname)
-  const menuButton = useRef<HTMLButtonElement>(null)
+  const previousLocation = useRef({ pathname: location.pathname, hash: '' })
   const main = useRef<HTMLElement>(null)
 
   function save(state: Workshop) {
     current.current = state
     setWorkshop(state)
-    try {
-      sessionStorage.setItem(workshopKey, JSON.stringify(state))
-      setStorageUnavailable(false)
-    } catch {
-      setStorageUnavailable(true)
-    }
+    setStorageUnavailable(!saveWorkshop(state))
   }
 
   function addCustomer(data: Omit<Customer, 'id'>) {
@@ -157,12 +103,22 @@ function App() {
   useEffect(() => {
     const heading = main.current?.querySelector('h1')
     document.title = heading ? `${heading.textContent} | Xokbil Studio` : 'Xokbil Studio'
-    if (previousPath.current !== location.pathname) {
-      previousPath.current = location.pathname
+    const pathChanged = previousLocation.current.pathname !== location.pathname
+    const hashChanged = previousLocation.current.hash !== location.hash
+    previousLocation.current = { pathname: location.pathname, hash: location.hash }
+    if (location.hash && (pathChanged || hashChanged)) {
+      const target = document.getElementById(location.hash.slice(1))
+      if (target && main.current?.contains(target)) {
+        target.focus({ preventScroll: true })
+        target.scrollIntoView({ block: 'nearest' })
+        return
+      }
+    }
+    if (pathChanged) {
       heading?.focus({ preventScroll: true })
       window.scrollTo(0, 0)
     }
-  }, [location.pathname])
+  }, [location.pathname, location.hash, role])
 
   const selected = sections.filter((section) => section.roles.includes(role))
   const allowed = (path: string) => selected.some((section) => section.path === path)
@@ -173,29 +129,33 @@ function App() {
 
   return <div className="shell">
     <a className="skip-link" href="#contenido" onClick={(event) => { event.preventDefault(); main.current?.focus() }}>Saltar al contenido</a>
-    <aside className="sidebar" data-open={menuOpen} onKeyDown={(event) => {
-      if (event.key === 'Escape') { setMenuOpen(false); menuButton.current?.focus() }
-    }}>
-      <div className="brand-line">
-        <Link to="/" className="brand" onClick={() => setMenuOpen(false)}><span className="brand-mark"><Icon name="sew" /></span>Xokbil Studio</Link>
-        <button ref={menuButton} className="menu-trigger" type="button" aria-expanded={menuOpen} aria-controls="navigation" onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /> Menú</button>
-      </div>
-      <nav id="navigation" aria-label="Navegación principal">
-        {selected.map(({ path, label, icon }) => <NavLink end={path === '/'} key={path} to={path} onClick={() => setMenuOpen(false)}>
-          <Icon name={icon} />{label}
-        </NavLink>)}
-      </nav>
-      <div className="sidebar-foot"><span className="status-dot" />Demostración local</div>
-    </aside>
-    <div className="workspace">
+    <header className="app-header">
+      <Link to="/" className="brand"><span className="brand-mark"><Icon name="sew" /></span>
+        <span className="brand-name">Xokbil Studio<span className="brand-status">Demo local</span></span>
+      </Link>
       <div className="topbar">
-        <span>{today.format(new Date())}</span>
-        <label>Rol de demostración <select value={role} onChange={(event) => setRole(event.target.value as Role)}>{roles.map((item) => <option key={item}>{item}</option>)}</select></label>
+        <span className="workshop-location"><Icon name="pin" /> Tekit, Yucatán</span>
+        <div className="session-controls">
+          <span className="demo-status"><span className="status-dot" />Demo local</span>
+          <label className="role-control"><span className="sr-only">Rol de demostración</span>
+            <Icon name="people" />
+            <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
+              {roles.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
+    </header>
+    <nav className="sidebar" aria-label="Navegación principal">
+      {selected.map(({ path, label, shortLabel, icon }) => <NavLink end={path === '/'} key={path} to={path}>
+        <Icon name={icon} /><span className="nav-label">{label}</span><span className="nav-label-short">{shortLabel}</span>
+      </NavLink>)}
+    </nav>
+    <div className="workspace">
       <main id="contenido" tabIndex={-1} ref={main}>
         {storageUnavailable && <p role="status" className="field-error no-print">El navegador no permite guardar la sesión. Conserva esta pestaña abierta sin recargar.</p>}
         <Routes>
-          <Route path="/" element={<Dashboard orders={orders} role={role} />} />
+          <Route path="/" element={<Dashboard orders={orders} canSell={canSell} canProduce={allowed('/produccion')} />} />
           <Route path="/pedidos" element={canSell ? <Sales orders={orders} /> : blocked} />
           <Route path="/pedidos/configurador" element={canSell ? <Configurator key={initialCustomer} customers={customers} initialCustomer={initialCustomer} onConfirm={confirm} /> : blocked} />
           <Route path="/pedidos/:id" element={canSell ? <OrderPage orders={orders} pay={pay} canSell /> : blocked} />
@@ -203,7 +163,7 @@ function App() {
           <Route path="/produccion" element={allowed('/produccion') ? <Production orders={orders} advance={(original) =>
             changeOrder(original.id, (order) => order.stage === original.stage ? advanceOrder(order, new Date().toISOString()) : order)
           } canSell={canSell} /> : blocked} />
-          <Route path="/inventario" element={allowed('/inventario') ? <Module title="Inventario y catálogos" detail="Aquí se integrarán las telas, los hilos y el catálogo de bordados del taller." /> : blocked} />
+          <Route path="/inventario" element={allowed('/inventario') ? <Inventory /> : blocked} />
           <Route path="/clientes" element={allowed('/clientes') ? <Customers customers={customers} orders={orders} add={addCustomer} /> : blocked} />
           <Route path="*" element={<Module title="Página fuera del taller" detail="La dirección solicitada no corresponde a una sección disponible."><Link className="button" to="/">Volver al panel</Link></Module>} />
         </Routes>

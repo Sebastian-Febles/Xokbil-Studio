@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { stages, type Order, type Stage } from './domain'
-import { Icon } from './visuals'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { isActiveOrder, stages, type Order, type Stage } from './domain'
+import { Icon, StageTag } from './visuals'
 
 const time = new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short' })
 const nextAction: Record<Stage, string> = {
@@ -14,10 +14,14 @@ const nextAction: Record<Stage, string> = {
 }
 
 export function Production({ orders, advance, canSell }: { orders: Order[]; advance: (order: Order) => boolean; canSell: boolean }) {
-  const [filter, setFilter] = useState<Stage | ''>('')
+  const [params, setParams] = useSearchParams()
+  const { hash } = useLocation()
   const [view, setView] = useState<'list' | 'board'>('list')
   const [notice, setNotice] = useState('')
-  const visible = filter ? orders.filter(({ stage }) => stage === filter) : orders
+  const requestedStage = params.get('etapa')
+  const filter = requestedStage === 'activas' ? requestedStage : stages.find((stage) => stage === requestedStage) ?? ''
+  const visible = filter === 'activas' ? orders.filter(isActiveOrder) : filter ? orders.filter(({ stage }) => stage === filter) : orders
+  const visibleStages = filter === 'activas' ? stages.slice(0, -2) : filter ? [filter] : stages
 
   function move(order: Order) {
     const next = stages[stages.indexOf(order.stage) + 1]
@@ -30,8 +34,9 @@ export function Production({ orders, advance, canSell }: { orders: Order[]; adva
   function orderCard(order: Order) {
     const next = stages[stages.indexOf(order.stage) + 1]
     const blocked = next === 'Entregado' && order.balance > 0
-    return <article key={order.id} className="card order-card" id={order.id} tabIndex={-1} aria-label={`${order.id} · ${order.stage}`}>
-      <div className="order-top"><h3>{order.id}</h3><span className="tag">{order.stage}</span></div>
+    return <article key={order.id} className="card order-card" id={order.id} tabIndex={-1} aria-label={`${order.id} · ${order.stage}`}
+      data-selected={hash === `#${order.id}` || undefined}>
+      <div className="order-top"><h3>{order.id}</h3><StageTag stage={order.stage} /></div>
       <strong>{order.garment}</strong>
       <p>{order.specs}</p>
       <details><summary>Detalles de la orden</summary><p>{order.customer}</p><p>{order.updatedAt ? `Último cambio: ${time.format(new Date(order.updatedAt))}` : 'Sin fecha de cambio registrada.'}</p></details>
@@ -46,8 +51,12 @@ export function Production({ orders, advance, canSell }: { orders: Order[]; adva
   return <>
     <header className="page-heading"><h1 tabIndex={-1}>Órdenes de producción</h1><p>Consulta los pedidos aprobados y registra su avance.</p></header>
     <div className="card board-toolbar">
-      <label htmlFor="filter-stage">Filtrar por etapa <select id="filter-stage" value={filter} onChange={(event) => { setFilter(event.target.value as Stage | ''); setNotice('') }}>
-        <option value="">Todas las etapas</option>{stages.map((stage) => <option key={stage}>{stage}</option>)}
+      <label htmlFor="filter-stage">Filtrar por etapa <select id="filter-stage" value={filter} onChange={(event) => {
+        setParams(event.target.value ? { etapa: event.target.value } : {})
+        setNotice('')
+      }}>
+        <option value="">Todas las etapas</option><option value="activas">Órdenes activas</option>
+        {stages.map((stage) => <option key={stage}>{stage}</option>)}
       </select></label>
       <div className="preview-actions" role="group" aria-label="Vista de producción">
         <button type="button" className="button button-secondary" aria-pressed={view === 'list'} onClick={() => setView('list')}><Icon name="list" /> Lista</button>
@@ -59,9 +68,9 @@ export function Production({ orders, advance, canSell }: { orders: Order[]; adva
       <h2 className="sr-only">Órdenes filtradas</h2>
       {visible.length ? visible.map(orderCard) : <p className="card no-orders">No hay órdenes en esta etapa.</p>}
     </section> : <div className="board">
-      {(filter ? [filter] : stages).map((stage) => <section key={stage} className="board-column">
+      {visibleStages.map((stage) => <section key={stage} className="board-column">
         <h2>{stage}</h2>
-        {orders.some((order) => order.stage === stage) ? orders.filter((order) => order.stage === stage).map(orderCard) : <p>Sin órdenes.</p>}
+        {visible.some((order) => order.stage === stage) ? visible.filter((order) => order.stage === stage).map(orderCard) : <p>Sin órdenes.</p>}
       </section>)}
     </div>}
   </>
